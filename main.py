@@ -5,23 +5,24 @@ import consts
 import sliders
 
 
-def get_region_of_interest_mask(frame):
-    mask = np.zeros_like(frame)
-    if len(frame.shape) > 2:
+def get_region_of_interest_mask(frame, apply_gray=1):
+    rows, cols = frame.shape[:2]
+    mask_shape = (rows, cols) if apply_gray else (rows, cols, 3)
+    mask = np.zeros(mask_shape, dtype=np.uint8)
+
+    if apply_gray:
+        ignore_mask_color = 255
+    else:
         channel_count = frame.shape[2]
         ignore_mask_color = (255,) * channel_count
-    else:
-        ignore_mask_color = 255
-
-    rows, cols = frame.shape[:2]
 
     bottom_left = [0, rows]
-    middle_left = [0, rows * 0.85]
-    top_left = [cols * 0.4, rows * 0.7]
+    middle_left = [0, int(rows * 0.85)]
+    top_left = [int(cols * 0.4), int(rows * 0.7)]
 
     bottom_right = [cols, rows]
-    middle_right = [cols, rows * 0.85]
-    top_right = [cols * 0.6, rows * 0.7]
+    middle_right = [cols, int(rows * 0.85)]
+    top_right = [int(cols * 0.6), int(rows * 0.7)]
 
     vertices = np.array(
         [[bottom_left, middle_left, top_left, top_right, middle_right, bottom_right]],
@@ -36,9 +37,14 @@ def detect_lanes_in_frame(
     region_of_interest_mask=None,
     canny_low_th=100,
     canny_high_th=200,
+    apply_gray=1,
     apply_region=1,
     apply_canny=1,
 ):
+    # converting to grayscale
+    if apply_gray:
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
     # applying region of interest mask
     if apply_region and region_of_interest_mask is not None:
         frame = cv2.bitwise_and(frame, region_of_interest_mask)
@@ -49,11 +55,13 @@ def detect_lanes_in_frame(
 
     # resizing the frame
     frame = cv2.resize(frame, (consts.DISPLAY_WIDTH, consts.DISPLAY_HEIGHT))
+
     return None, frame
 
 
 def main(args):
     cap = cv2.VideoCapture(consts.VIDEO_PATH)
+    prev_gray = 1
     if not cap.isOpened():
         print("Error: Could not open video.")
         exit(1)
@@ -69,29 +77,37 @@ def main(args):
             if not ret:
                 break
 
-            # get the region of interest only once.
-            if region_of_interest_mask is None:
-                region_of_interest_mask = get_region_of_interest_mask(input_frame)
-
             # get the current trackbar values if in slider mode
             if args.sliders:
-                apply_region, apply_canny, canny_low_th, canny_high_th = (
+                apply_gray, apply_region, apply_canny, canny_low_th, canny_high_th = (
                     sliders_instance.get_values()
                 )
             else:
                 canny_low_th = consts.DEFAULT_CANNY_LOW_TH
                 canny_high_th = consts.DEFAULT_CANNY_HIGH_TH
                 apply_region = 1
+                apply_gray = 1
                 apply_canny = 1
+
+            if apply_gray != prev_gray:
+                region_of_interest_mask = None
+                prev_gray = apply_gray
+
+            # get the region of interest only once.
+            if region_of_interest_mask is None:
+                region_of_interest_mask = get_region_of_interest_mask(
+                    input_frame, apply_gray
+                )
 
             # detect lanes in the frame
             err, output_frame = detect_lanes_in_frame(
-                input_frame,
-                region_of_interest_mask,
-                canny_low_th,
-                canny_high_th,
-                apply_region,
-                apply_canny,
+                frame=input_frame,
+                region_of_interest_mask=region_of_interest_mask,
+                canny_low_th=canny_low_th,
+                canny_high_th=canny_high_th,
+                apply_gray=apply_gray,
+                apply_region=apply_region,
+                apply_canny=apply_canny,
             )
 
             # handle errors detecting lanes
