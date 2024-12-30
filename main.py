@@ -32,15 +32,43 @@ def get_region_of_interest_mask(frame, apply_gray=1):
     return mask
 
 
+def get_color_mask(frame):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    mask_yellow = cv2.inRange(
+        hsv,
+        np.array(consts.DEFAULT_YELLOW_LOWER),
+        np.array(consts.DEFAULT_YELLOW_UPPER),
+    )
+    mask_white = cv2.inRange(
+        hsv,
+        np.array(consts.DEFAULT_WHITE_LOWER),
+        np.array(consts.DEFAULT_WHITE_UPPER),
+    )
+
+    mask = cv2.bitwise_or(mask_yellow, mask_white)
+    return mask
+
+
 def detect_lanes_in_frame(
     frame,
     region_of_interest_mask=None,
-    canny_low_th=100,
-    canny_high_th=200,
+    apply_color=1,
     apply_gray=1,
     apply_region=1,
     apply_canny=1,
+    apply_hough=1,
+    canny_low_th=consts.DEFAULT_CANNY_LOW_TH,
+    canny_high_th=consts.DEFAULT_CANNY_HIGH_TH,
+    hough_th=consts.DEFAULT_HOUGH_TH,
+    hough_min_line_length=consts.DEFAULT_HOUGH_MIN_LINE_LENGTH,
+    hough_max_line_gap=consts.DEFAULT_HOUGH_MAX_LINE_GAP,
 ):
+    # applying color mask
+    if apply_color:
+        color_mask = get_color_mask(frame)
+        frame = cv2.bitwise_and(frame, frame, mask=color_mask)
+
     # converting to grayscale
     if apply_gray:
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -52,6 +80,28 @@ def detect_lanes_in_frame(
     # applying Canny
     if apply_canny:
         frame = cv2.Canny(frame, canny_low_th, canny_high_th)
+
+    # applying HoughLines
+    if apply_hough:
+        hough_linesp = cv2.HoughLinesP(
+            frame,
+            rho=1,
+            theta=np.pi / 180,
+            threshold=hough_th,
+            minLineLength=hough_min_line_length,
+            maxLineGap=hough_max_line_gap,
+        )
+        if hough_linesp is not None:
+            for i in range(0, len(hough_linesp)):
+                line = hough_linesp[i][0]
+                cv2.line(
+                    frame,
+                    (line[0], line[1]),
+                    (line[2], line[3]),
+                    (255, 0, 0),
+                    3,
+                    cv2.LINE_AA,
+                )
 
     # resizing the frame
     frame = cv2.resize(frame, (consts.DISPLAY_WIDTH, consts.DISPLAY_HEIGHT))
@@ -79,15 +129,29 @@ def main(args):
 
             # get the current trackbar values if in slider mode
             if args.sliders:
-                apply_gray, apply_region, apply_canny, canny_low_th, canny_high_th = (
-                    sliders_instance.get_values()
-                )
+                (
+                    apply_color,
+                    apply_gray,
+                    apply_region,
+                    apply_canny,
+                    apply_hough,
+                    canny_low_th,
+                    canny_high_th,
+                    hough_th,
+                    hough_min_line_length,
+                    hough_max_line_gap,
+                ) = sliders_instance.get_values()
             else:
+                apply_color = 1
+                apply_gray = 1
+                apply_region = 1
+                apply_canny = 1
+                apply_hough = 1
                 canny_low_th = consts.DEFAULT_CANNY_LOW_TH
                 canny_high_th = consts.DEFAULT_CANNY_HIGH_TH
-                apply_region = 1
-                apply_gray = 1
-                apply_canny = 1
+                hough_th = consts.DEFAULT_HOUGH_TH
+                hough_min_line_length = consts.DEFAULT_HOUGH_MIN_LINE_LENGTH
+                hough_max_line_gap = consts.DEFAULT_HOUGH_MAX_LINE_GAP
 
             if apply_gray != prev_gray:
                 region_of_interest_mask = None
@@ -103,11 +167,16 @@ def main(args):
             err, output_frame = detect_lanes_in_frame(
                 frame=input_frame,
                 region_of_interest_mask=region_of_interest_mask,
-                canny_low_th=canny_low_th,
-                canny_high_th=canny_high_th,
+                apply_color=apply_color,
                 apply_gray=apply_gray,
                 apply_region=apply_region,
                 apply_canny=apply_canny,
+                apply_hough=apply_hough,
+                canny_low_th=canny_low_th,
+                canny_high_th=canny_high_th,
+                hough_th=hough_th,
+                hough_min_line_length=hough_min_line_length,
+                hough_max_line_gap=hough_max_line_gap,
             )
 
             # handle errors detecting lanes
