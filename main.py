@@ -18,11 +18,11 @@ def get_region_of_interest_mask(frame, apply_gray=1):
 
     bottom_left = [0, rows]
     middle_left = [0, int(rows * 0.85)]
-    top_left = [int(cols * 0.4), int(rows * 0.7)]
+    top_left = [int(cols * 0.3), int(rows * 0.75)]
 
     bottom_right = [cols, rows]
     middle_right = [cols, int(rows * 0.85)]
-    top_right = [int(cols * 0.6), int(rows * 0.7)]
+    top_right = [int(cols * 0.7), int(rows * 0.75)]
 
     vertices = np.array(
         [[bottom_left, middle_left, top_left, top_right, middle_right, bottom_right]],
@@ -58,6 +58,10 @@ def detect_lanes_in_frame(
     apply_region=1,
     apply_canny=1,
     apply_hough=1,
+    gaussian_blur_kernel_size=consts.DEFAULT_GAUSSIAN_BLUR_KERNEL_SIZE,
+    bilateral_filter_d=consts.DEFAULT_BILATERALFILTER_D,
+    bilateral_filter_sigma_color=consts.DEFAULT_BILATERALFILTER_SIGMA_COLOR,
+    bilateral_filter_sigma_space=consts.DEFAULT_BILATERALFILTER_SIGMA_SPACE,
     canny_low_th=consts.DEFAULT_CANNY_LOW_TH,
     canny_high_th=consts.DEFAULT_CANNY_HIGH_TH,
     hough_th=consts.DEFAULT_HOUGH_TH,
@@ -73,6 +77,11 @@ def detect_lanes_in_frame(
     if apply_gray:
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+    # applying GaussianBlur
+    frame = cv2.GaussianBlur(
+        frame, (2 * gaussian_blur_kernel_size + 1, 2 * gaussian_blur_kernel_size + 1), 0
+    )
+
     # applying region of interest mask
     if apply_region and region_of_interest_mask is not None:
         frame = cv2.bitwise_and(frame, region_of_interest_mask)
@@ -81,7 +90,19 @@ def detect_lanes_in_frame(
     if apply_canny:
         frame = cv2.Canny(frame, canny_low_th, canny_high_th)
 
+    # applying bilateral filter
+    if bilateral_filter_d > 0:
+        frame = cv2.bilateralFilter(
+            frame,
+            bilateral_filter_d,
+            bilateral_filter_sigma_color,
+            bilateral_filter_sigma_space,
+        )
+
     # applying HoughLines
+    if apply_hough and not apply_canny and not apply_gray:
+        return "HoughLines can only be applied after Canny or Gray", None
+
     if apply_hough:
         hough_linesp = cv2.HoughLinesP(
             frame,
@@ -135,6 +156,10 @@ def main(args):
                     apply_region,
                     apply_canny,
                     apply_hough,
+                    bilateral_filter_d,
+                    bilateral_filter_sigma_color,
+                    bilateral_filter_sigma_space,
+                    gaussian_blur_kernel_size,
                     canny_low_th,
                     canny_high_th,
                     hough_th,
@@ -147,6 +172,14 @@ def main(args):
                 apply_region = 1
                 apply_canny = 1
                 apply_hough = 1
+                bilateral_filter_d = consts.DEFAULT_BILATERALFILTER_D
+                bilateral_filter_sigma_color = (
+                    consts.DEFAULT_BILATERALFILTER_SIGMA_COLOR
+                )
+                bilateral_filter_sigma_space = (
+                    consts.DEFAULT_BILATERALFILTER_SIGMA_SPACE
+                )
+                gaussian_blur_kernel_size = consts.DEFAULT_GAUSSIAN_BLUR_KERNEL_SIZE
                 canny_low_th = consts.DEFAULT_CANNY_LOW_TH
                 canny_high_th = consts.DEFAULT_CANNY_HIGH_TH
                 hough_th = consts.DEFAULT_HOUGH_TH
@@ -172,6 +205,10 @@ def main(args):
                 apply_region=apply_region,
                 apply_canny=apply_canny,
                 apply_hough=apply_hough,
+                bilateral_filter_d=bilateral_filter_d,
+                bilateral_filter_sigma_color=bilateral_filter_sigma_color,
+                bilateral_filter_sigma_space=bilateral_filter_sigma_space,
+                gaussian_blur_kernel_size=gaussian_blur_kernel_size,
                 canny_low_th=canny_low_th,
                 canny_high_th=canny_high_th,
                 hough_th=hough_th,
