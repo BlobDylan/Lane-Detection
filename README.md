@@ -7,8 +7,7 @@ Have python 3.x installed
 ## Installation
 1. Clone the repository:
     ```sh
-    git clone https://github.com/yourusername/CVPROJ1.git
-    cd CVPROJ1
+    git clone https://github.com/BlobDylan/Lane-Detection
     ```
 
 2. Install the required packages:
