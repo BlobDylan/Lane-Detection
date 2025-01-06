@@ -5,106 +5,58 @@ import consts
 class Sliders:
     def __init__(self):
         cv2.namedWindow("Sliders", flags=cv2.WINDOW_NORMAL)
-        cv2.createTrackbar("Color", "Sliders", 1, 1, lambda x: x)
-        cv2.createTrackbar("Gray", "Sliders", 1, 1, lambda x: x)
-        cv2.createTrackbar("Region", "Sliders", 1, 1, lambda x: x)
-        cv2.createTrackbar("Canny", "Sliders", 1, 1, lambda x: x)
-        cv2.createTrackbar("Hough", "Sliders", 1, 1, lambda x: x)
-        cv2.createTrackbar(
-            "Bilateral d", "Sliders", consts.DEFAULT_BILATERALFILTER_D, 9, lambda x: x
-        )
-        cv2.createTrackbar(
-            "Bilateral SC",
-            "Sliders",
-            consts.DEFAULT_BILATERALFILTER_SIGMA_COLOR,
-            300,
-            lambda x: x,
-        )
-        cv2.createTrackbar(
-            "Bilateral SS",
-            "Sliders",
-            consts.DEFAULT_BILATERALFILTER_SIGMA_SPACE,
-            300,
-            lambda x: x,
-        )
-        cv2.createTrackbar(
-            "Gaussian K",
-            "Sliders",
-            consts.DEFAULT_GAUSSIAN_BLUR_KERNEL_SIZE,
-            20,
-            lambda x: x,
-        )
-        cv2.createTrackbar(
-            "Canny LTH", "Sliders", consts.DEFAULT_CANNY_LOW_TH, 500, lambda x: x
-        )
-        cv2.createTrackbar(
-            "Canny HTH", "Sliders", consts.DEFAULT_CANNY_HIGH_TH, 500, lambda x: x
-        )
-        cv2.createTrackbar(
-            "Hough TH", "Sliders", consts.DEFAULT_HOUGH_TH, 500, lambda x: x
-        )
-        cv2.createTrackbar(
-            "Hough MINL",
-            "Sliders",
-            consts.DEFAULT_HOUGH_MIN_LINE_LENGTH,
-            500,
-            lambda x: x,
-        )
-        cv2.createTrackbar(
-            "Hough MAXG", "Sliders", consts.DEFAULT_HOUGH_MAX_LINE_GAP, 500, lambda x: x
-        )
+        trackbars = {
+            "Base Layer": (1, 1),
+            "Color": (1, 1),
+            "Gray": (1, 1),
+            "Threshold": (1, 1),
+            "Region": (1, 1),
+            "Perspective": (1, 1),
+            "Canny": (1, 1),
+            "Hough": (1, 1),
+            "Gaussian K": (consts.DEFAULT_GAUSSIAN_BLUR_KERNEL_SIZE, 50),
+            "Canny LTH": (consts.DEFAULT_CANNY_LOW_TH, 500),
+            "Canny HTH": (consts.DEFAULT_CANNY_HIGH_TH, 500),
+            "Dilate K": (consts.DEFAULT_DILATE_KERNEL_SIZE, 5),
+            "Hough TH": (consts.DEFAULT_HOUGH_TH, 500),
+            "Hough MINL": (consts.DEFAULT_HOUGH_MIN_LINE_LENGTH, 500),
+            "Hough MAXG": (consts.DEFAULT_HOUGH_MAX_LINE_GAP, 500),
+        }
 
-        self.apply_color = cv2.getTrackbarPos("Color", "Sliders")
-        self.apply_gray = cv2.getTrackbarPos("Gray", "Sliders")
-        self.apply_region = cv2.getTrackbarPos("Region", "Sliders")
-        self.apply_canny = cv2.getTrackbarPos("Canny", "Sliders")
-        self.apply_hough = cv2.getTrackbarPos("Hough", "Sliders")
-        self.bilateral_filter_d = cv2.getTrackbarPos("Bilateral d", "Sliders")
-        self.bilateral_filter_sigma_color = cv2.getTrackbarPos(
-            "Bilateral SC", "Sliders"
-        )
-        self.bilateral_filter_sigma_space = cv2.getTrackbarPos(
-            "Bilateral SS", "Sliders"
-        )
-        self.gaussian_blur_kernel_size = cv2.getTrackbarPos("Gaussian K", "Sliders")
-        self.canny_low_th = cv2.getTrackbarPos("Canny LTH", "Sliders")
-        self.canny_high_th = cv2.getTrackbarPos("Canny HTH", "Sliders")
-        self.hough_th = cv2.getTrackbarPos("Hough TH", "Sliders")
-        self.hough_min_line_length = cv2.getTrackbarPos("Hough MINL", "Sliders")
-        self.hough_max_line_gap = cv2.getTrackbarPos("Hough MAXG", "Sliders")
+        # Create trackbars
+        for name, (default, max_value) in trackbars.items():
+            cv2.createTrackbar(name, "Sliders", default, max_value, lambda x: x)
 
     def get_values(self):
-        self.apply_color = cv2.getTrackbarPos("Color", "Sliders")
-        self.apply_gray = cv2.getTrackbarPos("Gray", "Sliders")
-        self.apply_region = cv2.getTrackbarPos("Region", "Sliders")
-        self.apply_canny = cv2.getTrackbarPos("Canny", "Sliders")
-        self.apply_hough = cv2.getTrackbarPos("Hough", "Sliders")
-        self.bilateral_filter_d = cv2.getTrackbarPos("Bilateral d", "Sliders")
-        self.bilateral_filter_sigma_color = cv2.getTrackbarPos(
-            "Bilateral SC", "Sliders"
-        )
-        self.bilateral_filter_sigma_space = cv2.getTrackbarPos(
-            "Bilateral SS", "Sliders"
-        )
-        self.gaussian_blur_kernel_size = cv2.getTrackbarPos("Gaussian K", "Sliders")
-        self.canny_low_th = cv2.getTrackbarPos("Canny LTH", "Sliders")
-        self.canny_high_th = cv2.getTrackbarPos("Canny HTH", "Sliders")
-        self.hough_th = cv2.getTrackbarPos("Hough TH", "Sliders")
-        self.hough_min_line_length = cv2.getTrackbarPos("Hough MINL", "Sliders")
-        self.hough_max_line_gap = cv2.getTrackbarPos("Hough MAXG", "Sliders")
+        base_layer = cv2.getTrackbarPos("Base Layer", "Sliders")
+        apply_color = cv2.getTrackbarPos("Color", "Sliders")
+        apply_gray = cv2.getTrackbarPos("Gray", "Sliders")
+        apply_threshold = cv2.getTrackbarPos("Threshold", "Sliders")
+        apply_region = cv2.getTrackbarPos("Region", "Sliders")
+        apply_perspective = cv2.getTrackbarPos("Perspective", "Sliders")
+        apply_canny = cv2.getTrackbarPos("Canny", "Sliders")
+        apply_hough = cv2.getTrackbarPos("Hough", "Sliders")
+        gaussian_blur_kernel_size = cv2.getTrackbarPos("Gaussian K", "Sliders")
+        canny_low_th = cv2.getTrackbarPos("Canny LTH", "Sliders")
+        canny_high_th = cv2.getTrackbarPos("Canny HTH", "Sliders")
+        dilate_kernel_size = cv2.getTrackbarPos("Dilate K", "Sliders")
+        hough_th = cv2.getTrackbarPos("Hough TH", "Sliders")
+        hough_min_line_length = cv2.getTrackbarPos("Hough MINL", "Sliders")
+        hough_max_line_gap = cv2.getTrackbarPos("Hough MAXG", "Sliders")
         return (
-            self.apply_color,
-            self.apply_gray,
-            self.apply_region,
-            self.apply_canny,
-            self.apply_hough,
-            self.bilateral_filter_d,
-            self.bilateral_filter_sigma_color,
-            self.bilateral_filter_sigma_space,
-            self.gaussian_blur_kernel_size,
-            self.canny_low_th,
-            self.canny_high_th,
-            self.hough_th,
-            self.hough_min_line_length,
-            self.hough_max_line_gap,
+            base_layer,
+            apply_color,
+            apply_gray,
+            apply_threshold,
+            apply_region,
+            apply_perspective,
+            apply_canny,
+            apply_hough,
+            gaussian_blur_kernel_size,
+            canny_low_th,
+            canny_high_th,
+            dilate_kernel_size,
+            hough_th,
+            hough_min_line_length,
+            hough_max_line_gap,
         )
