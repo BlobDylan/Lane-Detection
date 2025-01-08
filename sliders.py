@@ -14,6 +14,7 @@ class Sliders:
             "Perspective": (1, 1),
             "Canny": (1, 1),
             "Hough": (1, 1),
+            "Filter Lines": (1, 1),
             "Gaussian K": (consts.DEFAULT_GAUSSIAN_BLUR_KERNEL_SIZE, 50),
             "Canny LTH": (consts.DEFAULT_CANNY_LOW_TH, 500),
             "Canny HTH": (consts.DEFAULT_CANNY_HIGH_TH, 500),
@@ -36,6 +37,7 @@ class Sliders:
         apply_perspective = cv2.getTrackbarPos("Perspective", "Sliders")
         apply_canny = cv2.getTrackbarPos("Canny", "Sliders")
         apply_hough = cv2.getTrackbarPos("Hough", "Sliders")
+        apply_filter_lines = cv2.getTrackbarPos("Filter Lines", "Sliders")
         gaussian_blur_kernel_size = cv2.getTrackbarPos("Gaussian K", "Sliders")
         canny_low_th = cv2.getTrackbarPos("Canny LTH", "Sliders")
         canny_high_th = cv2.getTrackbarPos("Canny HTH", "Sliders")
@@ -52,6 +54,7 @@ class Sliders:
             apply_perspective,
             apply_canny,
             apply_hough,
+            apply_filter_lines,
             gaussian_blur_kernel_size,
             canny_low_th,
             canny_high_th,
