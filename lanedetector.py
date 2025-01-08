@@ -31,6 +31,14 @@ class LaneDetector:
         self.hough_min_line_length = consts.DEFAULT_HOUGH_MIN_LINE_LENGTH
         self.hough_max_line_gap = consts.DEFAULT_HOUGH_MAX_LINE_GAP
 
+        self.lane_color = (0, 255, 0)
+
+        self.lane_history = []
+        self.consecutive_frames_no_lanes = 0
+        self.distance_from_median_threshold = (
+            consts.DEFAULT_DISTANCE_FROM_MEDIAN_THRESHOLD
+        )
+
         if use_sliders:
             self.sliders_instance = sliders.Sliders()
             self.get_sliders_values()
@@ -405,8 +413,18 @@ class LaneDetector:
                 if self.base_layer:
                     lines = self.filer_lines(hough_linesp)
                     if len(lines) == 2:
-                        x1, y1, x2, y2 = lines[0]
-                        x3, y3, x4, y4 = lines[1]
+                        median_lane = self.get_median_lane()
+                        if median_lane is None or self.is_close_to_median(
+                            lines, median_lane
+                        ):
+                            self.update_lane_history(lines)
+                            x1, y1, x2, y2 = lines[0]
+                            x3, y3, x4, y4 = lines[1]
+                            self.lane_color = (0, 255, 0)
+                        else:
+                            x1, y1, x2, y2 = median_lane[0]
+                            x3, y3, x4, y4 = median_lane[1]
+                            self.lane_color = (255, 0, 0)
                         # Apply inverse perspective transform to the line endpoints
                         points = np.array(
                             [[x1, y1], [x2, y2], [x3, y3], [x4, y4]], dtype=np.float32
@@ -423,8 +441,14 @@ class LaneDetector:
                         poly_points = self.extend_polygon_to_bottom(
                             transformed_points, frame.shape[0]
                         )
-                        cv2.fillPoly(output_frame, np.int32([poly_points]), (0, 255, 0))
+                        cv2.fillPoly(
+                            output_frame, np.int32([poly_points]), self.lane_color
+                        )
                     else:
+                        self.consecutive_frames_no_lanes += 1
+                        if self.consecutive_frames_no_lanes > 8:
+                            self.lane_history = []
+                            self.consecutive_frames_no_lanes = 0
                         # Draw the lines
                         if (
                             self.apply_perspective
@@ -467,3 +491,30 @@ class LaneDetector:
         )
 
         return None, output_frame
+
+    def update_lane_history(self, lanes):
+        self.lane_history.append(lanes)
+        if len(self.lane_history) > consts.DEFAULT_LANE_HISTORY_SIZE:
+            self.lane_history.pop(0)
+
+    def get_median_lane(self):
+        lanes = []
+        for lane in self.lane_history:
+            if len(lane) == 2:
+                lanes.append(lane)
+        if len(lanes) == 0:
+            return None
+        lanes = np.array(lanes)
+        return np.median(lanes, axis=0)
+
+    # closesness by IOU
+    def is_close_to_median(self, lane, median_lane):
+        if median_lane is None:
+            return False
+        if len(self.lane_history) < consts.DEFAULT_LANE_HISTORY_SIZE // 2:
+            return True
+        lane = np.array(lane)
+        intersection = np.minimum(lane, median_lane)
+        union = np.maximum(lane, median_lane)
+        iou = np.sum(intersection) / np.sum(union)
+        return iou > self.distance_from_median_threshold
