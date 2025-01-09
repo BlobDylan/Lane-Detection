@@ -39,6 +39,11 @@ class LaneDetector:
             consts.DEFAULT_DISTANCE_FROM_MEDIAN_THRESHOLD
         )
 
+        self.is_moving_lanes = False
+        self.lane_move_direction = None
+        self.intersection_x_history_left = []
+        self.intersection_x_history_right = []
+
         if use_sliders:
             self.sliders_instance = sliders.Sliders()
             self.get_sliders_values()
@@ -323,10 +328,12 @@ class LaneDetector:
         )
 
         left_bottom_x = (
-            left_lane_point[0] + (image_height - left_lane_point[1]) / left_slope
+            left_lane_point[0] + (image_height - left_lane_point[1]) / left_slope + 1e-6
         )
         right_bottom_x = (
-            right_lane_point[0] + (image_height - right_lane_point[1]) / right_slope
+            right_lane_point[0]
+            + (image_height - right_lane_point[1]) / right_slope
+            + 1e-6
         )
 
         extended_polygon = np.array(
@@ -425,6 +432,12 @@ class LaneDetector:
                             x1, y1, x2, y2 = median_lane[0]
                             x3, y3, x4, y4 = median_lane[1]
                             self.lane_color = (255, 0, 0)
+                        self.update_intersection_x_history_left(
+                            self.get_line_intersection_x(x1, y1, x2, y2)
+                        )
+                        self.update_intersection_x_history_right(
+                            self.get_line_intersection_x(x3, y3, x4, y4)
+                        )
                         # Apply inverse perspective transform to the line endpoints
                         points = np.array(
                             [[x1, y1], [x2, y2], [x3, y3], [x4, y4]], dtype=np.float32
@@ -456,6 +469,15 @@ class LaneDetector:
                         ):
                             for line in lines:
                                 x1, y1, x2, y2 = line
+                                if len(lines) == 1:
+                                    if self.is_closer_to_left(x1, y1, x2, y2):
+                                        self.update_intersection_x_history_left(
+                                            self.get_line_intersection_x(x1, y1, x2, y2)
+                                        )
+                                    else:
+                                        self.update_intersection_x_history_right(
+                                            self.get_line_intersection_x(x1, y1, x2, y2)
+                                        )
                                 points = np.array(
                                     [[x1, y1], [x2, y2]], dtype=np.float32
                                 ).reshape(-1, 1, 2)
@@ -471,6 +493,8 @@ class LaneDetector:
                                     (0, 255, 0),
                                     3,
                                 )
+
+                    self.update_moving_lanes()
                 else:
                     if self.apply_filter_lines:
                         lines = self.filer_lines(hough_linesp)
@@ -484,6 +508,18 @@ class LaneDetector:
                         cv2.line(output_frame, (x1, y1), (x2, y2), (255, 255, 255), 3)
         else:
             output_frame = frame
+
+        if self.is_moving_lanes:
+            cv2.putText(
+                output_frame,
+                f"MOVING LANES {self.lane_move_direction}",
+                (10, 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 0, 255),
+                2,
+                cv2.LINE_AA,
+            )
 
         # resizing the frame just so it fits in the screen for display purposes.
         output_frame = cv2.resize(
@@ -516,5 +552,109 @@ class LaneDetector:
         lane = np.array(lane)
         intersection = np.minimum(lane, median_lane)
         union = np.maximum(lane, median_lane)
-        iou = np.sum(intersection) / np.sum(union)
+        iou = np.sum(intersection) / np.sum(union) + 1e-6
         return iou > self.distance_from_median_threshold
+
+    def update_intersection_x_history_left(self, x):
+        self.intersection_x_history_left.append(x)
+        if (
+            len(self.intersection_x_history_left)
+            > consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
+        ):
+            self.intersection_x_history_left.pop(0)
+
+    def update_intersection_x_history_right(self, x):
+        self.intersection_x_history_right.append(x)
+        if (
+            len(self.intersection_x_history_right)
+            > consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
+        ):
+            self.intersection_x_history_right.pop(0)
+
+    def get_line_intersection_x(self, x1, y1, x2, y2):
+        y = self.frame_shape[0]
+        slope = (y2 - y1) / (x2 - x1 + 1e-6)
+        return x1 + (y - y1) / slope + 1e-6
+
+    def is_closer_to_left(self, x1, y1, x2, y2):
+        if len(self.intersection_x_history_left) == 0:
+            return True if self.lane_move_direction == "LEFT" else False
+        intersection = self.get_line_intersection_x(x1, y1, x2, y2)
+        left = np.array(self.intersection_x_history_left)
+        right = np.array(self.intersection_x_history_right)
+        left = np.sort(left)
+        right = np.sort(right)
+        left = left[3:-3]
+        right = right[3:-3]
+        median_left = np.median(left)
+        median_right = np.median(right)
+        return abs(intersection - median_left) < abs(intersection - median_right)
+
+    def update_moving_lanes(self):
+        if (
+            len(self.intersection_x_history_left)
+            != consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
+        ):
+            return
+        if (
+            len(self.intersection_x_history_right)
+            != consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
+        ):
+            return
+        # remove two largest and smallest values
+        left = np.array(self.intersection_x_history_left)
+        right = np.array(self.intersection_x_history_right)
+        left_sorted = np.sort(left)
+        right_sorted = np.sort(right)
+        left_sorted = left_sorted[3:-3]
+        right_sorted = right_sorted[3:-3]
+        # keep original ordering but remove outliers
+        left_without_outliers = np.array([x for x in left if x in left_sorted])
+        right_without_outliers = np.array([x for x in right if x in right_sorted])
+
+        if self.consecutive_frames_no_lanes > 0:
+            if self.consecutive_frames_no_lanes > 5:
+                self.intersection_x_history_left = []
+                self.intersection_x_history_right = []
+                return
+            if (
+                abs(left_sorted[0] - left_sorted[-1])
+                > consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+                or abs(right_sorted[0] - right_sorted[-1])
+                > consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+            ):
+                if (
+                    left_without_outliers[-1] > left_without_outliers[0]
+                    and right_without_outliers[-1] > right_without_outliers[0]
+                ):
+                    self.lane_move_direction = "LEFT"
+                elif (
+                    left_without_outliers[-1] < left_without_outliers[0]
+                    and right_without_outliers[-1] < right_without_outliers[0]
+                ):
+                    self.lane_move_direction = "RIGHT"
+
+                self.is_moving_lanes = True
+                return
+
+        if (
+            abs(left_sorted[0] - left_sorted[-1])
+            > consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+            and abs(right_sorted[0] - right_sorted[-1])
+            > consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+        ):
+            if (
+                left_without_outliers[-1] > left_without_outliers[0]
+                and right_without_outliers[-1] > right_without_outliers[0]
+            ):
+                self.lane_move_direction = "LEFT"
+            elif (
+                left_without_outliers[-1] < left_without_outliers[0]
+                and right_without_outliers[-1] < right_without_outliers[0]
+            ):
+                self.lane_move_direction = "RIGHT"
+
+            self.is_moving_lanes = True
+            return
+        self.is_moving_lanes = False
+        return
