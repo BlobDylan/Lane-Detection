@@ -218,9 +218,9 @@ class LaneDetector:
         return x1, y1, x2, y2
 
     def get_best_lanes(self, groups):
-        group_size_weight = 0.5
-        sum_of_distances_from_opposite_lanes_weight = 0.5
-        sum_of_lengths_weight = 0.5
+        group_size_weight = 0.02
+        sum_of_distances_from_opposite_lanes_weight = 0.9
+        sum_of_lengths_weight = 0.08
 
         groups_scores_averages_left = []
         groups_scores_averages_right = []
@@ -304,7 +304,7 @@ class LaneDetector:
 
     def filer_lines(self, lines):
         lines = self.remove_lines_by_angle(lines)
-        groups = self.group_close_lines(lines, 90)
+        groups = self.group_close_lines(lines, 80)
         best_left_lane, best_right_lane = self.get_best_lanes(groups)
         lanes = []
         if best_left_lane is not None:
@@ -355,6 +355,12 @@ class LaneDetector:
         frame,
     ):
         original_frame = frame.copy()
+
+        # applying color mask
+        if self.apply_color:
+            color_mask = self.get_color_mask(frame)
+            frame = cv2.bitwise_and(frame, frame, mask=color_mask)
+
         # applying GaussianBlur
         frame = cv2.GaussianBlur(
             frame,
@@ -364,11 +370,6 @@ class LaneDetector:
             ),
             0,
         )
-
-        # applying color mask
-        if self.apply_color:
-            color_mask = self.get_color_mask(frame)
-            frame = cv2.bitwise_and(frame, frame, mask=color_mask)
 
         # converting to grayscale
         if self.apply_gray:
@@ -385,8 +386,8 @@ class LaneDetector:
                 self.perspective_transform_matrix,
                 (frame.shape[1], frame.shape[0]),
             )
-        else:
-            frame = self.draw_perspective_lines(frame)
+        # else:
+        #     frame = self.draw_perspective_lines(frame)
 
         # applying region of interest mask
         if self.apply_region and self.region_of_interest_mask is not None:
