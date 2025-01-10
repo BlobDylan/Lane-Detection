@@ -43,6 +43,7 @@ class LaneDetector:
         self.lane_move_direction = None
         self.intersection_x_history_left = []
         self.intersection_x_history_right = []
+        self.average_change_history = []
 
         if use_sliders:
             self.sliders_instance = sliders.Sliders()
