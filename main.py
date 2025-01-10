@@ -16,6 +16,7 @@ def main(args):
     )
 
     lanedetector_instance = lanedetector.LaneDetector(frame_shape, args.sliders)
+    pause = False
 
     try:
         while True:
@@ -45,6 +46,11 @@ def main(args):
             # break on 'q' key
             if cv2.waitKey(25) & 0xFF == ord("q"):
                 break
+            if cv2.waitKey(25) & 0xFF == ord("p"):
+                pause = True
+            while pause:
+                if cv2.waitKey(25) & 0xFF == ord("u"):
+                    pause = False
     finally:
         cap.release()
         cv2.destroyAllWindows()
