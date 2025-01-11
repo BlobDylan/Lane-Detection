@@ -31,8 +31,6 @@ class LaneDetector:
         self.hough_min_line_length = consts.DEFAULT_HOUGH_MIN_LINE_LENGTH
         self.hough_max_line_gap = consts.DEFAULT_HOUGH_MAX_LINE_GAP
 
-        self.lane_color = (0, 255, 0)
-
         self.lane_history = []
         self.consecutive_frames_no_lanes = 0
         self.distance_from_median_threshold = (
@@ -43,6 +41,7 @@ class LaneDetector:
         self.lane_move_direction = None
         self.intersection_x_history_left = []
         self.intersection_x_history_right = []
+        self.average_change_history = []
 
         if use_sliders:
             self.sliders_instance = sliders.Sliders()
@@ -354,8 +353,6 @@ class LaneDetector:
         self,
         frame,
     ):
-        original_frame = frame.copy()
-
         # applying color mask
         if self.apply_color:
             color_mask = self.get_color_mask(frame)
@@ -416,118 +413,68 @@ class LaneDetector:
                 minLineLength=self.hough_min_line_length,
                 maxLineGap=self.hough_max_line_gap,
             )
-            output_frame = original_frame if self.base_layer else frame
+            poly_points = None
             if hough_linesp is not None:
-                if self.base_layer:
-                    lines = self.filer_lines(hough_linesp)
-                    if len(lines) == 2:
-                        median_lane = self.get_median_lane()
-                        if median_lane is None or self.is_close_to_median(
-                            lines, median_lane
-                        ):
-                            self.update_lane_history(lines)
-                            x1, y1, x2, y2 = lines[0]
-                            x3, y3, x4, y4 = lines[1]
-                            self.lane_color = (0, 255, 0)
-                        else:
-                            x1, y1, x2, y2 = median_lane[0]
-                            x3, y3, x4, y4 = median_lane[1]
-                            self.lane_color = (255, 0, 0)
-                        self.update_intersection_x_history_left(
-                            self.get_line_intersection_x(x1, y1, x2, y2)
-                        )
-                        self.update_intersection_x_history_right(
-                            self.get_line_intersection_x(x3, y3, x4, y4)
-                        )
-                        # Apply inverse perspective transform to the line endpoints
-                        points = np.array(
-                            [[x1, y1], [x2, y2], [x3, y3], [x4, y4]], dtype=np.float32
-                        ).reshape(-1, 1, 2)
-                        transformed_points = points
-                        if (
-                            self.base_layer
-                            and self.apply_perspective
-                            and self.inverse_perspective_transform_matrix is not None
-                        ):
-                            transformed_points = cv2.perspectiveTransform(
-                                points, self.inverse_perspective_transform_matrix
-                            )
-                        poly_points = self.extend_polygon_to_bottom(
-                            transformed_points, frame.shape[0]
-                        )
-                        cv2.fillPoly(
-                            output_frame, np.int32([poly_points]), self.lane_color
-                        )
+                lines = self.filer_lines(hough_linesp)
+                if len(lines) == 2:
+                    median_lane = self.get_median_lane()
+                    if median_lane is None or self.is_close_to_median(
+                        lines, median_lane
+                    ):
+                        self.update_lane_history(lines)
+                        x1, y1, x2, y2 = lines[0]
+                        x3, y3, x4, y4 = lines[1]
                     else:
-                        self.consecutive_frames_no_lanes += 1
-                        if self.consecutive_frames_no_lanes > 8:
-                            self.lane_history = []
-                            self.consecutive_frames_no_lanes = 0
-                        # Draw the lines
-                        if (
-                            self.apply_perspective
-                            and self.inverse_perspective_transform_matrix is not None
-                        ):
-                            for line in lines:
-                                x1, y1, x2, y2 = line
-                                if len(lines) == 1:
-                                    if self.is_closer_to_left(x1, y1, x2, y2):
-                                        self.update_intersection_x_history_left(
-                                            self.get_line_intersection_x(x1, y1, x2, y2)
-                                        )
-                                    else:
-                                        self.update_intersection_x_history_right(
-                                            self.get_line_intersection_x(x1, y1, x2, y2)
-                                        )
-                                points = np.array(
-                                    [[x1, y1], [x2, y2]], dtype=np.float32
-                                ).reshape(-1, 1, 2)
-                                transformed_points = cv2.perspectiveTransform(
-                                    points, self.inverse_perspective_transform_matrix
-                                )
-                                x1, y1 = transformed_points[0][0]
-                                x2, y2 = transformed_points[1][0]
-                                cv2.line(
-                                    output_frame,
-                                    (int(x1), int(y1)),
-                                    (int(x2), int(y2)),
-                                    (0, 255, 0),
-                                    3,
-                                )
-
-                    self.update_moving_lanes()
+                        x1, y1, x2, y2 = median_lane[0]
+                        x3, y3, x4, y4 = median_lane[1]
+                    self.update_intersection_x_history_left(
+                        self.get_line_intersection_x(x1, y1, x2, y2)
+                    )
+                    self.update_intersection_x_history_right(
+                        self.get_line_intersection_x(x3, y3, x4, y4)
+                    )
+                    # Apply inverse perspective transform to the line endpoints
+                    points = np.array(
+                        [[x1, y1], [x2, y2], [x3, y3], [x4, y4]], dtype=np.float32
+                    ).reshape(-1, 1, 2)
+                    transformed_points = points
+                    if (
+                        self.base_layer
+                        and self.apply_perspective
+                        and self.inverse_perspective_transform_matrix is not None
+                    ):
+                        transformed_points = cv2.perspectiveTransform(
+                            points, self.inverse_perspective_transform_matrix
+                        )
+                    poly_points = self.extend_polygon_to_bottom(
+                        transformed_points, frame.shape[0]
+                    )
                 else:
-                    if self.apply_filter_lines:
-                        lines = self.filer_lines(hough_linesp)
-                    else:
-                        lines = hough_linesp
-                    for line in lines:
-                        if isinstance(line[0], (list, np.ndarray)):
-                            x1, y1, x2, y2 = line[0]
-                        else:
+                    self.consecutive_frames_no_lanes += 1
+                    if self.consecutive_frames_no_lanes > 8:
+                        self.lane_history = []
+                        self.consecutive_frames_no_lanes = 0
+                    # Draw the lines
+                    if (
+                        self.apply_perspective
+                        and self.inverse_perspective_transform_matrix is not None
+                    ):
+                        for line in lines:
                             x1, y1, x2, y2 = line
-                        cv2.line(output_frame, (x1, y1), (x2, y2), (255, 255, 255), 3)
+                            if len(lines) == 1:
+                                if self.is_closer_to_left(x1, y1, x2, y2):
+                                    self.update_intersection_x_history_left(
+                                        self.get_line_intersection_x(x1, y1, x2, y2)
+                                    )
+                                else:
+                                    self.update_intersection_x_history_right(
+                                        self.get_line_intersection_x(x1, y1, x2, y2)
+                                    )
+                self.update_moving_lanes()
         else:
-            output_frame = frame
+            return
 
-        if self.is_moving_lanes:
-            cv2.putText(
-                output_frame,
-                f"MOVING LANES {self.lane_move_direction}",
-                (10, 50),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 0, 255),
-                2,
-                cv2.LINE_AA,
-            )
-
-        # resizing the frame just so it fits in the screen for display purposes.
-        output_frame = cv2.resize(
-            output_frame, (consts.DISPLAY_WIDTH, consts.DISPLAY_HEIGHT)
-        )
-
-        return None, output_frame
+        return None, poly_points, self.is_moving_lanes, self.lane_move_direction
 
     def update_lane_history(self, lanes):
         self.lane_history.append(lanes)

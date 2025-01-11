@@ -1,6 +1,32 @@
+import consts
+import numpy as np
 import cv2
 import argparse
 import lanedetector
+import cardetector
+
+
+def mark_average_of_groups_in_frame(frame, averages_of_groups):
+    for point in averages_of_groups:
+        cv2.circle(frame, (int(point[1]), int(point[0])), 75, (0, 0, 255), -1)
+    return frame
+
+
+def mark_polygon_in_frame(frame, poly_points):
+    cv2.fillPoly(frame, np.int32([poly_points]), (0, 255, 0))
+
+
+def write_moving_lanes(frame, direction):
+    cv2.putText(
+        frame,
+        f"MOVING LANES {direction}",
+        (10, 50),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (255, 0, 0),
+        2,
+        cv2.LINE_AA,
+    )
 
 
 def main(args):
@@ -16,6 +42,7 @@ def main(args):
     )
 
     lanedetector_instance = lanedetector.LaneDetector(frame_shape, args.sliders)
+    cardetector_instance = cardetector.CarDetector()
     pause = False
 
     try:
@@ -31,14 +58,33 @@ def main(args):
             lanedetector_instance.define_masks_if_needed()
 
             # detect lanes in the frame
-            err, output_frame = lanedetector_instance.detect_lanes_in_frame(
-                frame=input_frame
+            err, poly_points, is_moving_lanes, direction = (
+                lanedetector_instance.detect_lanes_in_frame(frame=input_frame)
             )
+
+            if is_moving_lanes:
+                write_moving_lanes(input_frame, direction)
+
+            if poly_points is not None:
+                mark_polygon_in_frame(input_frame, poly_points)
 
             # handle errors detecting lanes
             if err:
                 print(f"Error: {err}")
                 break
+
+            # detect cars in the frame
+            averages_of_groups = cardetector_instance.detect_cars_in_frame(input_frame)
+
+            # mark the averages of the groups in the frame
+            output_frame = mark_average_of_groups_in_frame(
+                input_frame, averages_of_groups
+            )
+
+            # resizing the frame just so it fits in the screen for display purposes.
+            output_frame = cv2.resize(
+                output_frame, (consts.DISPLAY_WIDTH, consts.DISPLAY_HEIGHT)
+            )
 
             # show the frame
             cv2.imshow("Frame", output_frame)
