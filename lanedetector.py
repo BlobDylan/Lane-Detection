@@ -6,6 +6,7 @@ import consts
 
 class LaneDetector:
     def __init__(self, frame_shape, use_sliders=False):
+        self.night_mode = False
         self.frame_shape = frame_shape
         self.use_sliders = use_sliders
         self.prev_gray = 1
@@ -30,6 +31,16 @@ class LaneDetector:
         self.hough_th = consts.DEFAULT_HOUGH_TH
         self.hough_min_line_length = consts.DEFAULT_HOUGH_MIN_LINE_LENGTH
         self.hough_max_line_gap = consts.DEFAULT_HOUGH_MAX_LINE_GAP
+        self.yellow_lower = np.array(consts.DEFAULT_YELLOW_LOWER)
+        self.yellow_upper = np.array(consts.DEFAULT_YELLOW_UPPER)
+        self.white_lower = np.array(consts.DEFAULT_WHITE_LOWER)
+        self.white_upper = np.array(consts.DEFAULT_WHITE_UPPER)
+        self.left_lane_angle_range = consts.DEFAULT_LEFT_ANGLE_RANGE
+        self.right_lane_angle_range = consts.DEFAULT_RIGHT_ANGLE_RANGE
+        self.lane_history_size = consts.DEFAULT_LANE_HISTORY_SIZE
+        self.intersection_x_history_size = consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
+        self.delta_moving_lanes_threshold = consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+        self.perspective_src = consts.DEFAULT_PERSPECTIVE_SRC
 
         self.lane_history = []
         self.consecutive_frames_no_lanes = 0
@@ -46,6 +57,98 @@ class LaneDetector:
         if use_sliders:
             self.sliders_instance = sliders.Sliders()
             self.get_sliders_values()
+
+    def set_night_mode(self, night_mode):
+        self.night_mode = night_mode
+
+        self.gaussian_blur_kernel_size = (
+            consts.DEFAULT_GAUSSIAN_BLUR_KERNEL_SIZE_NIGHT
+            if night_mode
+            else consts.DEFAULT_GAUSSIAN_BLUR_KERNEL_SIZE
+        )
+        self.canny_low_th = (
+            consts.DEFAULT_CANNY_LOW_TH_NIGHT
+            if night_mode
+            else consts.DEFAULT_CANNY_LOW_TH
+        )
+        self.canny_high_th = (
+            consts.DEFAULT_CANNY_HIGH_TH_NIGHT
+            if night_mode
+            else consts.DEFAULT_CANNY_HIGH_TH
+        )
+        self.dilate_kernel_size = (
+            consts.DEFAULT_DILATE_KERNEL_SIZE_NIGHT
+            if night_mode
+            else consts.DEFAULT_DILATE_KERNEL_SIZE
+        )
+        self.hough_th = (
+            consts.DEFAULT_HOUGH_TH_NIGHT if night_mode else consts.DEFAULT_HOUGH_TH
+        )
+        self.hough_min_line_length = (
+            consts.DEFAULT_HOUGH_MIN_LINE_LENGTH_NIGHT
+            if night_mode
+            else consts.DEFAULT_HOUGH_MIN_LINE_LENGTH
+        )
+        self.hough_max_line_gap = (
+            consts.DEFAULT_HOUGH_MAX_LINE_GAP_NIGHT
+            if night_mode
+            else consts.DEFAULT_HOUGH_MAX_LINE_GAP
+        )
+        self.yellow_lower = (
+            np.array(consts.DEFAULT_YELLOW_LOWER_NIGHT)
+            if night_mode
+            else np.array(consts.DEFAULT_YELLOW_LOWER)
+        )
+        self.yellow_upper = (
+            np.array(consts.DEFAULT_YELLOW_UPPER_NIGHT)
+            if night_mode
+            else np.array(consts.DEFAULT_YELLOW_UPPER)
+        )
+        self.white_lower = (
+            np.array(consts.DEFAULT_WHITE_LOWER_NIGHT)
+            if night_mode
+            else np.array(consts.DEFAULT_WHITE_LOWER)
+        )
+        self.white_upper = (
+            np.array(consts.DEFAULT_WHITE_UPPER_NIGHT)
+            if night_mode
+            else np.array(consts.DEFAULT_WHITE_UPPER)
+        )
+        self.left_lane_angle_range = (
+            consts.DEFAULT_LEFT_ANGLE_RANGE_NIGHT
+            if night_mode
+            else consts.DEFAULT_LEFT_ANGLE_RANGE
+        )
+        self.right_lane_angle_range = (
+            consts.DEFAULT_RIGHT_ANGLE_RANGE_NIGHT
+            if night_mode
+            else consts.DEFAULT_RIGHT_ANGLE_RANGE
+        )
+        self.lane_history_size = (
+            consts.DEFAULT_LANE_HISTORY_SIZE_NIGHT
+            if night_mode
+            else consts.DEFAULT_LANE_HISTORY_SIZE
+        )
+        self.intersection_x_history_size = (
+            consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE_NIGHT
+            if night_mode
+            else consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
+        )
+        self.delta_moving_lanes_threshold = (
+            consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD_NIGHT
+            if night_mode
+            else consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+        )
+        self.perspective_src = (
+            consts.DEFAULT_PERSPECTIVE_SRC_NIGHT
+            if night_mode
+            else consts.DEFAULT_PERSPECTIVE_SRC
+        )
+        self.distance_from_median_threshold = (
+            consts.DEFAULT_DISTANCE_FROM_MEDIAN_THRESHOLD_NIGHT
+            if night_mode
+            else consts.DEFAULT_DISTANCE_FROM_MEDIAN_THRESHOLD
+        )
 
     def get_sliders_values(self):
         if self.use_sliders:
@@ -83,10 +186,10 @@ class LaneDetector:
         rows, cols = self.frame_shape[:2]
         src = np.float32(
             [
-                [cols * 0.3, rows * 0.75],
-                [cols * 0.7, rows * 0.75],
-                [cols, rows],
-                [0, rows],
+                [cols * self.perspective_src[0], rows * self.perspective_src[1]],
+                [cols * self.perspective_src[2], rows * self.perspective_src[3]],
+                [cols * self.perspective_src[4], rows * self.perspective_src[5]],
+                [cols * self.perspective_src[6], rows * self.perspective_src[7]],
             ]
         )
         dst = np.float32(
@@ -152,13 +255,13 @@ class LaneDetector:
 
         mask_yellow = cv2.inRange(
             hsv,
-            np.array(consts.DEFAULT_YELLOW_LOWER),
-            np.array(consts.DEFAULT_YELLOW_UPPER),
+            np.array(self.yellow_lower),
+            np.array(self.yellow_upper),
         )
         mask_white = cv2.inRange(
             hsv,
-            np.array(consts.DEFAULT_WHITE_LOWER),
-            np.array(consts.DEFAULT_WHITE_UPPER),
+            np.array(self.white_lower),
+            np.array(self.white_upper),
         )
 
         mask = cv2.bitwise_or(mask_yellow, mask_white)
@@ -167,8 +270,8 @@ class LaneDetector:
     def remove_lines_by_angle(self, lines):
         filtered_lines = []
 
-        left_lane_angle_range = consts.DEFAULT_LEFT_ANGLE_RANGE
-        right_lane_angle_range = consts.DEFAULT_RIGHT_ANGLE_RANGE
+        left_lane_angle_range = self.left_lane_angle_range
+        right_lane_angle_range = self.right_lane_angle_range
 
         for line in lines:
             for x1, y1, x2, y2 in line:
@@ -230,16 +333,12 @@ class LaneDetector:
                 0
             ]  # Assume first line in the group determines the angle
             angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
-            if (
-                consts.DEFAULT_LEFT_ANGLE_RANGE[0]
-                <= angle
-                <= consts.DEFAULT_LEFT_ANGLE_RANGE[1]
-            ):
+            if self.left_lane_angle_range[0] <= angle <= self.left_lane_angle_range[1]:
                 groups_scores_averages_left.append(group)
             elif (
-                consts.DEFAULT_RIGHT_ANGLE_RANGE[0]
+                self.right_lane_angle_range[0]
                 <= angle
-                <= consts.DEFAULT_RIGHT_ANGLE_RANGE[1]
+                <= self.right_lane_angle_range[1]
             ):
                 groups_scores_averages_right.append(group)
 
@@ -478,7 +577,7 @@ class LaneDetector:
 
     def update_lane_history(self, lanes):
         self.lane_history.append(lanes)
-        if len(self.lane_history) > consts.DEFAULT_LANE_HISTORY_SIZE:
+        if len(self.lane_history) > self.lane_history_size:
             self.lane_history.pop(0)
 
     def get_median_lane(self):
@@ -495,7 +594,7 @@ class LaneDetector:
     def is_close_to_median(self, lane, median_lane):
         if median_lane is None:
             return False
-        if len(self.lane_history) < consts.DEFAULT_LANE_HISTORY_SIZE // 2:
+        if len(self.lane_history) < self.lane_history_size // 2:
             return True
         lane = np.array(lane)
         intersection = np.minimum(lane, median_lane)
@@ -505,18 +604,12 @@ class LaneDetector:
 
     def update_intersection_x_history_left(self, x):
         self.intersection_x_history_left.append(x)
-        if (
-            len(self.intersection_x_history_left)
-            > consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
-        ):
+        if len(self.intersection_x_history_left) > self.intersection_x_history_size:
             self.intersection_x_history_left.pop(0)
 
     def update_intersection_x_history_right(self, x):
         self.intersection_x_history_right.append(x)
-        if (
-            len(self.intersection_x_history_right)
-            > consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
-        ):
+        if len(self.intersection_x_history_right) > self.intersection_x_history_size:
             self.intersection_x_history_right.pop(0)
 
     def get_line_intersection_x(self, x1, y1, x2, y2):
@@ -539,15 +632,9 @@ class LaneDetector:
         return abs(intersection - median_left) < abs(intersection - median_right)
 
     def update_moving_lanes(self):
-        if (
-            len(self.intersection_x_history_left)
-            != consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
-        ):
+        if len(self.intersection_x_history_left) != self.intersection_x_history_size:
             return
-        if (
-            len(self.intersection_x_history_right)
-            != consts.DEFAULT_INTERSECTION_X_HISTORY_SIZE
-        ):
+        if len(self.intersection_x_history_right) != self.intersection_x_history_size:
             return
         # remove two largest and smallest values
         left = np.array(self.intersection_x_history_left)
@@ -567,9 +654,9 @@ class LaneDetector:
                 return
             if (
                 abs(left_sorted[0] - left_sorted[-1])
-                > consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+                > self.delta_moving_lanes_threshold
                 or abs(right_sorted[0] - right_sorted[-1])
-                > consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+                > self.delta_moving_lanes_threshold
             ):
                 if (
                     left_without_outliers[-1] > left_without_outliers[0]
@@ -586,10 +673,9 @@ class LaneDetector:
                 return
 
         if (
-            abs(left_sorted[0] - left_sorted[-1])
-            > consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+            abs(left_sorted[0] - left_sorted[-1]) > self.delta_moving_lanes_threshold
             and abs(right_sorted[0] - right_sorted[-1])
-            > consts.DEFAULT_DELTA_MOVING_LANES_THRESHOLD
+            > self.delta_moving_lanes_threshold
         ):
             if (
                 left_without_outliers[-1] > left_without_outliers[0]
