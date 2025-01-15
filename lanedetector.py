@@ -217,27 +217,6 @@ class LaneDetector:
             dst, src
         )
 
-    def draw_perspective_lines(self, frame):
-        rows, cols = frame.shape[:2]
-        src = np.float32(
-            [
-                [cols * self.perspective_src[0], rows * self.perspective_src[1]],
-                [cols * self.perspective_src[2], rows * self.perspective_src[3]],
-                [cols * self.perspective_src[4], rows * self.perspective_src[5]],
-                [cols * self.perspective_src[6], rows * self.perspective_src[7]],
-            ]
-        )
-        for i in range(4):
-            cv2.line(
-                frame,
-                (int(src[i][0]), int(src[i][1])),
-                (int(src[(i + 1) % 4][0]), int(src[(i + 1) % 4][1])),
-                (255, 255, 255),
-                3,
-                cv2.LINE_AA,
-            )
-        return frame
-
     def get_region_of_interest_mask(self):
         rows, cols = self.frame_shape[:2]
         mask_shape = (rows, cols) if self.apply_gray else (rows, cols, 3)
@@ -445,6 +424,12 @@ class LaneDetector:
             + 1e-6
         )
 
+        # avoid convering float inf to int
+        if right_bottom_x == float("inf"):
+            right_bottom_x = image_height
+        if left_bottom_x == float("inf"):
+            left_bottom_x = image_height
+
         extended_polygon = np.array(
             [
                 [left_lane_point[0], left_lane_point[1]],
@@ -493,8 +478,6 @@ class LaneDetector:
                 self.perspective_transform_matrix,
                 (frame.shape[1], frame.shape[0]),
             )
-        # else:
-        #     frame = self.draw_perspective_lines(frame)
 
         # applying region of interest mask
         if (
@@ -666,11 +649,13 @@ class LaneDetector:
             if self.consecutive_frames_no_lanes > 5:
                 self.intersection_x_history_left = []
                 self.intersection_x_history_right = []
+                self.average_change_history = []
+                self.is_moving_lanes = False
                 return
             if (
                 abs(left_sorted[0] - left_sorted[-1])
                 > self.delta_moving_lanes_threshold
-                or abs(right_sorted[0] - right_sorted[-1])
+                and abs(right_sorted[0] - right_sorted[-1])
                 > self.delta_moving_lanes_threshold
             ):
                 if (
@@ -686,7 +671,8 @@ class LaneDetector:
 
                 self.is_moving_lanes = True
                 return
-
+            self.is_moving_lanes = False
+            return
         if (
             abs(left_sorted[0] - left_sorted[-1]) > self.delta_moving_lanes_threshold
             and abs(right_sorted[0] - right_sorted[-1])
