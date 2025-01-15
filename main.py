@@ -10,7 +10,7 @@ def draw_lines_between_tail_lights(frame, pairs_of_groups):
     for points in pairs_of_groups:
         pt1 = tuple(map(int, points[0]))
         pt2 = tuple(map(int, points[1]))
-        cv2.line(frame, [pt2[1], pt2[0]], [pt1[1], pt1[0]], (0, 255, 0), 2)
+        cv2.line(frame, [pt2[1], pt2[0]], [pt1[1], pt1[0]], (0, 0, 255), 2)
         pixel_width = np.abs(pt1[1] - pt2[1])
         distance = calculate_distance(pixel_width + 100)
         cv2.putText(
@@ -19,7 +19,7 @@ def draw_lines_between_tail_lights(frame, pairs_of_groups):
             (int((pt1[1] + pt2[1]) / 2), int((pt1[0] + pt2[0]) / 2)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
-            (0, 255, 0),
+            (0, 0, 255),
             2,
             cv2.LINE_AA,
         )
@@ -27,7 +27,22 @@ def draw_lines_between_tail_lights(frame, pairs_of_groups):
 
 
 def mark_polygon_in_frame(frame, poly_points):
-    cv2.fillPoly(frame, np.int32([poly_points]), (0, 255, 0))
+    # Find 4 points to draw the polygon
+    new_poly_points = sorted(poly_points, key=lambda x: x[1])
+    bottom_points = new_poly_points[:2]
+    top_points = new_poly_points[-2:]
+    bottom_left = min(bottom_points, key=lambda x: x[0])
+    bottom_right = max(bottom_points, key=lambda x: x[0])
+    top_left = min(top_points, key=lambda x: x[0])
+    top_right = max(top_points, key=lambda x: x[0])
+
+    # Reshape the array to match cv2.fillPoly's requirements
+    new_poly_points = np.array(
+        [bottom_left, bottom_right, top_right, top_left], dtype=np.int32
+    ).reshape((-1, 1, 2))
+
+    # Fill the polygon on the frame
+    cv2.fillPoly(frame, [new_poly_points], (0, 255, 0))
 
 
 def write_moving_lanes(frame, direction):

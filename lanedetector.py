@@ -186,10 +186,22 @@ class LaneDetector:
         rows, cols = self.frame_shape[:2]
         src = np.float32(
             [
-                [cols * self.perspective_src[0], rows * self.perspective_src[1]],
-                [cols * self.perspective_src[2], rows * self.perspective_src[3]],
-                [cols * self.perspective_src[4], rows * self.perspective_src[5]],
-                [cols * self.perspective_src[6], rows * self.perspective_src[7]],
+                [
+                    cols * self.perspective_src[0],
+                    rows * self.perspective_src[1],
+                ],  # 0.3, 0.75 top left
+                [
+                    cols * self.perspective_src[2],
+                    rows * self.perspective_src[3],
+                ],  # 0.7, 0.75 top right
+                [
+                    cols * self.perspective_src[4],
+                    rows * self.perspective_src[5],
+                ],  # 1, 1 btm right
+                [
+                    cols * self.perspective_src[6],
+                    rows * self.perspective_src[7],
+                ],  # 0, 1 btm left
             ]
         )
         dst = np.float32(
@@ -209,10 +221,10 @@ class LaneDetector:
         rows, cols = frame.shape[:2]
         src = np.float32(
             [
-                [cols * 0.3, rows * 0.75],
-                [cols * 0.7, rows * 0.75],
-                [cols, rows],
-                [0, rows],
+                [cols * self.perspective_src[0], rows * self.perspective_src[1]],
+                [cols * self.perspective_src[2], rows * self.perspective_src[3]],
+                [cols * self.perspective_src[4], rows * self.perspective_src[5]],
+                [cols * self.perspective_src[6], rows * self.perspective_src[7]],
             ]
         )
         for i in range(4):
@@ -220,7 +232,7 @@ class LaneDetector:
                 frame,
                 (int(src[i][0]), int(src[i][1])),
                 (int(src[(i + 1) % 4][0]), int(src[(i + 1) % 4][1])),
-                (0, 255, 0),
+                (255, 255, 255),
                 3,
                 cv2.LINE_AA,
             )
@@ -332,14 +344,13 @@ class LaneDetector:
             x1, y1, x2, y2 = group[
                 0
             ]  # Assume first line in the group determines the angle
-            angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
-            if self.left_lane_angle_range[0] <= angle <= self.left_lane_angle_range[1]:
+
+            slope = (y2 - y1) / (x2 - x1 + 1e-6)
+            bottom_x = x1 + (self.frame_shape[0] - y1) / slope
+
+            if bottom_x < self.frame_shape[1] / 2:
                 groups_scores_averages_left.append(group)
-            elif (
-                self.right_lane_angle_range[0]
-                <= angle
-                <= self.right_lane_angle_range[1]
-            ):
+            else:
                 groups_scores_averages_right.append(group)
 
         # Compute scores for left and right groups
@@ -486,7 +497,11 @@ class LaneDetector:
         #     frame = self.draw_perspective_lines(frame)
 
         # applying region of interest mask
-        if self.apply_region and self.region_of_interest_mask is not None:
+        if (
+            not self.night_mode
+            and self.apply_region
+            and self.region_of_interest_mask is not None
+        ):
             frame = cv2.bitwise_and(frame, self.region_of_interest_mask)
 
         # applying Canny
@@ -615,7 +630,7 @@ class LaneDetector:
     def get_line_intersection_x(self, x1, y1, x2, y2):
         y = self.frame_shape[0]
         slope = (y2 - y1) / (x2 - x1 + 1e-6)
-        return x1 + (y - y1) / slope + 1e-6
+        return x1 + (y - y1) / (slope + 1e-6)
 
     def is_closer_to_left(self, x1, y1, x2, y2):
         if len(self.intersection_x_history_left) == 0:
