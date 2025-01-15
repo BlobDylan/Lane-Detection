@@ -4,8 +4,9 @@ import consts
 
 
 class CarDetector:
-    def __init__(self):
-        self.night_mode = False
+    def __init__(self, frame_shape):
+        self.frame_shape = frame_shape
+        self.region_of_interest_mask = None
         self.red_lower = np.array(consts.DEFAULT_RED_LOWER)
         self.red_upper = np.array(consts.DEFAULT_RED_UPPER)
         self.dilate_kernel_size = consts.DEFAULT_DILATE_KERNEL_SIZE_CARS
@@ -15,9 +16,6 @@ class CarDetector:
         self.history_closeness_threshold = consts.DEFAULT_HISTORY_CLOSENESS_THRESHOLD
         self.kmeans_k = consts.DEFAULT_CARS_KMEANS_K
         self.points_history = []
-
-    def set_night_mode(self, night_mode):
-        self.night_mode = night_mode
 
     def apply_red_mask(self, frame):
         hsv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -112,7 +110,30 @@ class CarDetector:
                 filtered_groups.append(group)
         return filtered_groups
 
+    def get_region_of_interest_mask_cars(self):
+        rows, cols = self.frame_shape[:2]
+        mask_shape = (rows, cols, 3)
+        mask = np.zeros(mask_shape, dtype=np.uint8)
+
+        channel_count = 3
+        ignore_mask_color = (255,) * channel_count
+
+        bottom_left = [0, rows]
+        top_left = [int(cols * 0.05), int(rows * 0.7)]
+
+        bottom_right = [cols, rows]
+        top_right = [int(cols * 0.95), int(rows * 0.7)]
+
+        vertices = np.array(
+            [[bottom_left, top_left, top_right, bottom_right]],
+            dtype=np.int32,
+        )
+        cv2.fillPoly(mask, vertices, ignore_mask_color)
+        self.region_of_interest_mask = mask
+
     def detect_cars_in_frame(self, frame):
+        self.get_region_of_interest_mask_cars()
+        frame = cv2.bitwise_and(frame, self.region_of_interest_mask)
         output_frame = self.apply_red_mask(frame)
 
         output_frame = cv2.cvtColor(output_frame, cv2.COLOR_BGR2GRAY)
@@ -132,15 +153,16 @@ class CarDetector:
             ),
         )
 
+        # return output_frame
+
         groups = self.group_close_points_in_frame(output_frame)
         averages_of_groups = self.get_averages_of_groups(groups)
         if len(averages_of_groups) > 0:
             self.points_history.append(averages_of_groups)
-            if len(self.points_history) > self.car_points_history_size:
-                self.points_history.pop(0)
+        if len(self.points_history) > self.car_points_history_size:
+            self.points_history.pop(0)
 
         pairs = self.get_pairs_of_groups(
             averages_of_groups, self.pair_closeness_threshold
         )
         return pairs
-        # return output_frame

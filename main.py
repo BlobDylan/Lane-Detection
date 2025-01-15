@@ -10,7 +10,7 @@ def draw_lines_between_tail_lights(frame, pairs_of_groups):
     for points in pairs_of_groups:
         pt1 = tuple(map(int, points[0]))
         pt2 = tuple(map(int, points[1]))
-        cv2.line(frame, [pt2[1], pt2[0]], [pt1[1], pt1[0]], (0, 0, 255), 2)
+        # cv2.line(frame, [pt2[1], pt2[0]], [pt1[1], pt1[0]], (0, 0, 255), 2)
         pixel_width = np.abs(pt1[1] - pt2[1])
         distance = calculate_distance(pixel_width + 100)
         cv2.putText(
@@ -18,7 +18,7 @@ def draw_lines_between_tail_lights(frame, pairs_of_groups):
             f"{distance:.2f}m",
             (int((pt1[1] + pt2[1]) / 2), int((pt1[0] + pt2[0]) / 2)),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
+            0.75,
             (0, 0, 255),
             2,
             cv2.LINE_AA,
@@ -28,6 +28,7 @@ def draw_lines_between_tail_lights(frame, pairs_of_groups):
 
 def mark_polygon_in_frame(frame, poly_points):
     # Find 4 points to draw the polygon
+    overlay = frame.copy()
     new_poly_points = sorted(poly_points, key=lambda x: x[1])
     bottom_points = new_poly_points[:2]
     top_points = new_poly_points[-2:]
@@ -42,7 +43,8 @@ def mark_polygon_in_frame(frame, poly_points):
     ).reshape((-1, 1, 2))
 
     # Fill the polygon on the frame
-    cv2.fillPoly(frame, [new_poly_points], (0, 255, 0))
+    cv2.fillPoly(overlay, [new_poly_points], (0, 255, 0))
+    cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
 
 
 def write_moving_lanes(frame, direction):
@@ -52,7 +54,7 @@ def write_moving_lanes(frame, direction):
         (10, 50),
         cv2.FONT_HERSHEY_SIMPLEX,
         1,
-        (255, 0, 0),
+        (0, 0, 255),
         2,
         cv2.LINE_AA,
     )
@@ -89,10 +91,9 @@ def main(args):
     )
 
     lanedetector_instance = lanedetector.LaneDetector(frame_shape, args.sliders)
-    cardetector_instance = cardetector.CarDetector()
+    cardetector_instance = cardetector.CarDetector(frame_shape)
     night_mode = False
     pause = False
-    sample_lane_polygon = np.array([[950, 800], [1050, 800], [1450, 1080], [600, 1080]])
 
     try:
         while True:
@@ -105,7 +106,13 @@ def main(args):
                 < consts.DEFAULT_NIGHT_THRESHOLD
             )
             lanedetector_instance.set_night_mode(night_mode)
-            cardetector_instance.set_night_mode(night_mode)
+
+            if night_mode:
+                GAMMA_CORRECTION_CURVE = np.array(
+                    [((i / 255.0) ** 0.4) * 255 for i in np.arange(0, 256)]
+                ).astype("uint8")
+                # correct the gamma of the frame
+                input_frame = cv2.LUT(input_frame, GAMMA_CORRECTION_CURVE)
 
             # get the current trackbar values if in slider mode
             lanedetector_instance.get_sliders_values()
@@ -130,23 +137,20 @@ def main(args):
                 break
 
             # detect cars in the frame
-            pairs_of_groups = cardetector_instance.detect_cars_in_frame(input_frame)
-            # frame = cardetector_instance.detect_cars_in_frame(input_frame)
+            if not lanedetector_instance.night_mode:
+                pairs_of_groups = cardetector_instance.detect_cars_in_frame(input_frame)
 
             output_frame = input_frame.copy()
-            # output_frame = frame
 
-            output_frame = draw_lines_between_tail_lights(input_frame, pairs_of_groups)
-
-            # draw sample_lane_polygon
-            # cv2.polylines(
-            #     output_frame,
-            #     [np.int32(sample_lane_polygon)],
-            #     isClosed=True,
-            #     color=(0, 0, 255),
-            #     thickness=2,
-            # )
-            # get perspective transform matrix
+            # draw lines between tail lights
+            if not lanedetector_instance.night_mode:
+                output_frame = draw_lines_between_tail_lights(
+                    input_frame, pairs_of_groups
+                )
+            # if lanedetector_instance.apply_color:
+            #     output_frame = cardetector_instance.detect_cars_in_frame(input_frame)
+            # else:
+            # output_frame = input_frame
             # resizing the frame just so it fits in the screen for display purposes.
             output_frame = cv2.resize(
                 output_frame, (consts.DISPLAY_WIDTH, consts.DISPLAY_HEIGHT)
